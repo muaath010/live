@@ -83,6 +83,7 @@
         });
 
         // هذه الوظيفة تتنفذ في كل مرة تلتقط فيها الكاميرا حركتك
+        // هذه الوظيفة تتنفذ في كل مرة تلتقط فيها الكاميرا حركتك
         hands.onResults((results) => {
             // مسح هيكل اليد السابق لرسم الهيكل الجديد في مكانه الجديد
             handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
@@ -90,11 +91,6 @@
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 
-                // 1. رسم هيكل اليد الرقمي باللون السماوي المضيء
-                drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, {color: '#00ffff', lineWidth: 4});
-                drawLandmarks(handCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 2});
-
-                // 2. منطق الرسم في الهواء
                 const thumb = landmarks[4]; // طرف الإبهام
                 const index = landmarks[8]; // طرف السبابة
                 
@@ -105,14 +101,18 @@
                 const x = index.x * drawingCanvas.width;
                 const y = index.y * drawingCanvas.height;
 
-                // إذا كانت المسافة قصيرة (تم إغلاق الإصبعين = وضع القلم على الورقة)
-                if (distance < 0.05) {
+                // التعديل هنا: كبرنا مسافة حساسية اللمس إلى 0.1 لتعمل بسهولة أكبر
+                if (distance < 0.1) {
+                    // تغيير لون هيكل اليد للأخضر لتعرف فوراً أنك في وضع "الرسم"
+                    drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, {color: '#00ff00', lineWidth: 4});
+                    drawLandmarks(handCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 2});
+
                     if (!isDrawing) {
                         isDrawing = true;
-                        lastX = x;
+                        lastX = x; // حفظ نقطة البداية
                         lastY = y;
                     }
-                    // رسم الخط
+                    // رسم الخط المضيء
                     drawCtx.beginPath();
                     drawCtx.moveTo(lastX, lastY);
                     drawCtx.lineTo(x, y);
@@ -122,12 +122,15 @@
                     lastX = x;
                     lastY = y;
                 } else {
-                    // فتح الإصبعين (رفع القلم عن الورقة)
+                    // إرجاع لون هيكل اليد للسماوي عند التوقف عن الرسم (فتح الأصابع)
+                    drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, {color: '#00ffff', lineWidth: 4});
+                    drawLandmarks(handCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 2});
+                    
+                    // إيقاف الرسم
                     isDrawing = false;
                 }
             }
         });
-
         // تشغيل الكاميرا وإرسال الصور للذكاء الاصطناعي
         const camera = new Camera(videoElement, {
             onFrame: async () => {
