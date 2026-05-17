@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>المنصة التفاعلية الشاملة</title>
+    <title>المنصة التفاعلية الشاملة - احترافي</title>
     <style>
         body { 
             margin: 0; 
@@ -10,48 +10,24 @@
             background-color: #111; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        /* تصميم لوحة التحكم العلوية */
         .control-panel {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10; /* لجعلها فوق كل شيء */
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px 20px;
-            border-radius: 15px;
-            display: flex;
-            gap: 15px;
-            border: 1px solid #00ffff;
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 10; background: rgba(0, 0, 0, 0.7); padding: 10px 20px;
+            border-radius: 15px; display: flex; gap: 15px; border: 1px solid #00ffff;
         }
         button {
-            background-color: #333;
-            color: white;
-            border: 2px solid #555;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.3s;
-            font-weight: bold;
+            background-color: #333; color: white; border: 2px solid #555;
+            padding: 10px 20px; font-size: 16px; border-radius: 8px;
+            cursor: pointer; transition: 0.3s; font-weight: bold;
         }
         button:hover { background-color: #555; }
         button.active { background-color: #00ffff; color: #000; border-color: #00ffff; }
         button.clear-btn { background-color: #ff0044; border-color: #ff0044; }
         button.clear-btn:hover { background-color: #cc0033; }
 
-        /* حاوية العرض */
-        .canvas-container { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            transform: scaleX(-1); /* قلب الشاشة لتعمل كمرآة */
-        }
+        .canvas-container { position: relative; width: 100vw; height: 100vh; transform: scaleX(-1); }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        
         #videoElement { display: none; }
-        
-        /* إخفاء بيئة 3D افتراضياً */
         #canvas3D { z-index: 1; display: none; }
         #drawingCanvas { z-index: 2; }
         #handCanvas { z-index: 3; pointer-events: none; }
@@ -79,24 +55,27 @@
     </div>
 
     <script>
-        // === 1. إعداد المتغيرات وحالة التطبيق ===
-        let currentMode = 'drawing'; // 'drawing' أو '3d'
+        // إعداد المتغيرات
+        let currentMode = 'drawing'; 
         let isDrawing = false;
-        let lastX = 0, lastY = 0;
         
-        // ربط عناصر لوحة التحكم
+        // متغيرات خوارزمية التنعيم (Lerp)
+        let smoothedX = 0;
+        let smoothedY = 0;
+        let lastX = 0;
+        let lastY = 0;
+        const smoothingFactor = 0.2; // نسبة التنعيم (كلما قل الرقم زادت النعومة، 0.2 ممتاز للكتابة)
+        
         const btnDrawing = document.getElementById('btnDrawing');
         const btn3D = document.getElementById('btn3D');
         const btnClear = document.getElementById('btnClear');
         
-        // ربط اللوحات
         const drawingCanvas = document.getElementById('drawingCanvas');
         const canvas3D = document.getElementById('canvas3D');
         const handCanvas = document.getElementById('handCanvas');
         const drawCtx = drawingCanvas.getContext('2d');
         const handCtx = handCanvas.getContext('2d');
 
-        // وظيفة ضبط حجم الشاشة وخصائص القلم
         function resizeCanvas() {
             drawingCanvas.width = window.innerWidth;
             drawingCanvas.height = window.innerHeight;
@@ -106,84 +85,76 @@
             drawCtx.strokeStyle = '#ff00a0';
             drawCtx.lineWidth = 6;
             drawCtx.lineCap = 'round';
-            drawCtx.shadowBlur = 15;
+            drawCtx.lineJoin = 'round'; // يجعل زوايا الخطوط دائرية وناعمة
+            drawCtx.shadowBlur = 10;
             drawCtx.shadowColor = '#ff00a0';
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // === 2. أحداث أزرار لوحة التحكم ===
         btnDrawing.addEventListener('click', () => {
             currentMode = 'drawing';
-            btnDrawing.classList.add('active');
-            btn3D.classList.remove('active');
-            drawingCanvas.style.display = 'block';
-            canvas3D.style.display = 'none';
+            btnDrawing.classList.add('active'); btn3D.classList.remove('active');
+            drawingCanvas.style.display = 'block'; canvas3D.style.display = 'none';
         });
 
         btn3D.addEventListener('click', () => {
             currentMode = '3d';
-            btn3D.classList.add('active');
-            btnDrawing.classList.remove('active');
-            drawingCanvas.style.display = 'none';
-            canvas3D.style.display = 'block';
+            btn3D.classList.add('active'); btnDrawing.classList.remove('active');
+            drawingCanvas.style.display = 'none'; canvas3D.style.display = 'block';
         });
 
         btnClear.addEventListener('click', () => {
-            // مسح لوحة الرسم بالكامل
             drawCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
         });
 
-        // === 3. إعداد بيئة Three.js (وضع تفكيك المجسمات) ===
+        // بيئة Three.js
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera3D.position.z = 5;
-
         const renderer = new THREE.WebGLRenderer({ canvas: canvas3D, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // إضافة إضاءة
         const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(1, 1, 2).normalize();
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
-        // إنشاء 3 قطع (تمثل أجزاء قابلة للتفكيك)
         const parts = [];
-        const colors = [0xff0000, 0x00ff00, 0x0000ff]; // أحمر، أخضر، أزرق
-        
+        const colors = [0xff0000, 0x00ff00, 0x0000ff];
         for(let i=0; i<3; i++) {
             const geo = new THREE.BoxGeometry(1, 1, 1);
             const mat = new THREE.MeshStandardMaterial({ color: colors[i] });
             const mesh = new THREE.Mesh(geo, mat);
-            // ترتيب القطع بجانب بعضها
             mesh.position.x = (i - 1) * 1.5; 
             scene.add(mesh);
             parts.push(mesh);
         }
 
-        let heldObject = null; // القطعة التي نمسك بها حالياً
-        const raycaster = new THREE.Raycaster(); // أداة التقاط القطع
+        let heldObject = null;
+        const raycaster = new THREE.Raycaster();
 
-        // حلقة تحديث الـ 3D
         function animate3D() {
             requestAnimationFrame(animate3D);
-            // تدوير القطع ببطء إذا لم تكن ممسوكة
             parts.forEach(part => {
                 if(part !== heldObject) {
-                    part.rotation.x += 0.01;
-                    part.rotation.y += 0.01;
+                    part.rotation.x += 0.01; part.rotation.y += 0.01;
                 }
             });
             renderer.render(scene, camera3D);
         }
         animate3D();
 
-        // === 4. إعداد التتبع الحركي (MediaPipe) ===
+        // التتبع الحركي (MediaPipe)
         const videoElement = document.getElementById('videoElement');
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
 
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        hands.setOptions({ 
+            maxNumHands: 1, 
+            modelComplexity: 1, 
+            minDetectionConfidence: 0.8, // زيادة الدقة لتقليل الاهتزاز
+            minTrackingConfidence: 0.8  // زيادة الدقة لتتبع أفضل
+        });
 
         hands.onResults((results) => {
             handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
@@ -192,58 +163,77 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const thumb = landmarks[4];
                 const index = landmarks[8];
+                
+                // حساب المسافة بدقة أعلى
                 const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
 
-                // رسم هيكل اليد
-                const handColor = distance < 0.1 ? '#00ff00' : '#00ffff';
+                const handColor = distance < 0.08 ? '#00ff00' : '#00ffff';
                 drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, {color: handColor, lineWidth: 4});
                 drawLandmarks(handCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 2});
 
-                // إحداثيات الشاشة 2D
-                const x = index.x * drawingCanvas.width;
-                const y = index.y * drawingCanvas.height;
+                // الإحداثيات الخام القادمة من الكاميرا
+                const rawX = index.x * drawingCanvas.width;
+                const rawY = index.y * drawingCanvas.height;
 
-                // إحداثيات الفضاء 3D (من -1 إلى 1)
+                // تطبيق خوارزمية التنعيم (Lerp)
+                // بدلاً من القفز للإحداثيات الجديدة، نتحرك نحوها بنسبة مئوية لامتصاص الاهتزاز
+                if (smoothedX === 0 && smoothedY === 0) {
+                    smoothedX = rawX;
+                    smoothedY = rawY;
+                } else {
+                    smoothedX += (rawX - smoothedX) * smoothingFactor;
+                    smoothedY += (rawY - smoothedY) * smoothingFactor;
+                }
+
                 const ndcX = (index.x * 2) - 1;
                 const ndcY = -(index.y * 2) + 1;
 
-                if (distance < 0.1) { // حركة الإمساك / القرص
+                // إذا كانت المسافة أقل من 0.08 (حركة ضغطة القلم / إنزال الإصبع)
+                if (distance < 0.08) { 
                     if (currentMode === 'drawing') {
-                        // منطق الرسم
-                        if (!isDrawing) { isDrawing = true; lastX = x; lastY = y; }
+                        if (!isDrawing) { 
+                            isDrawing = true; 
+                            // عند بدء الرسم، نلتقط النقطة الحالية بدقة
+                            lastX = smoothedX; 
+                            lastY = smoothedY; 
+                        }
+                        // رسم الخط باستخدام الإحداثيات المنعمة
                         drawCtx.beginPath();
                         drawCtx.moveTo(lastX, lastY);
-                        drawCtx.lineTo(x, y);
+                        drawCtx.lineTo(smoothedX, smoothedY);
                         drawCtx.stroke();
-                        lastX = x; lastY = y;
+                        
+                        lastX = smoothedX; 
+                        lastY = smoothedY;
                     } 
                     else if (currentMode === '3d') {
-                        // منطق التقاط المجسمات
                         if (!heldObject) {
-                            // إطلاق شعاع ليزر من موقع الإصبع
                             raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera3D);
                             const intersects = raycaster.intersectObjects(parts);
                             if (intersects.length > 0) {
-                                heldObject = intersects[0].object; // الإمساك بأول قطعة يلمسها الشعاع
-                                heldObject.material.emissive.setHex(0x555555); // إضاءة القطعة الممسوكة
+                                heldObject = intersects[0].object; 
+                                heldObject.material.emissive.setHex(0x555555);
                             }
                         } else {
-                            // تحريك القطعة الممسوكة لتتبع إصبعك
-                            heldObject.position.x = ndcX * 6;
-                            heldObject.position.y = ndcY * 4;
+                            // تطبيق التنعيم على حركة المجسمات أيضاً لتبدو طبيعية
+                            heldObject.position.x += ((ndcX * 6) - heldObject.position.x) * 0.2;
+                            heldObject.position.y += ((ndcY * 4) - heldObject.position.y) * 0.2;
                         }
                     }
-                } else { // فتح الأصابع (الإفلات)
+                } else { 
                     isDrawing = false;
+                    // إعادة تصفير المتغيرات عند رفع القلم
+                    smoothedX = rawX;
+                    smoothedY = rawY;
+                    
                     if (heldObject) {
-                        heldObject.material.emissive.setHex(0x000000); // إطفاء إضاءة القطعة
-                        heldObject = null; // إفلات القطعة
+                        heldObject.material.emissive.setHex(0x000000); 
+                        heldObject = null; 
                     }
                 }
             }
         });
 
-        // تشغيل الكاميرا
         const camera = new Camera(videoElement, {
             onFrame: async () => { await hands.send({image: videoElement}); },
             width: 1280, height: 720
