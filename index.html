@@ -1,186 +1,325 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>المنصة التفاعلية الشاملة - السبورة البيضاء</title>
-    <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            /* 1. تحويل الخلفية إلى الأبيض */
-            background-color: #ffffff; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        /* 2. تعديل لوحة التحكم لتناسب الخلفية الفاتحة */
-        .control-panel {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 10; background: rgba(240, 240, 240, 0.9); padding: 10px 20px;
-            border-radius: 15px; display: flex; gap: 15px; border: 1px solid #ccc;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        button {
-            background-color: #fff; color: #333; border: 2px solid #bbb;
-            padding: 10px 20px; font-size: 16px; border-radius: 8px;
-            cursor: pointer; transition: 0.3s; font-weight: bold;
-        }
-        button:hover { background-color: #f0f0f0; }
-        button.active { background-color: #007bff; color: #fff; border-color: #007bff; }
-        button.clear-btn { background-color: #dc3545; color: white; border-color: #dc3545; }
-        button.clear-btn:hover { background-color: #c82333; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Drawing App</title>
+  
+  <!-- MediaPipe dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-        .canvas-container { position: relative; width: 100vw; height: 100vh; transform: scaleX(-1); }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #videoElement { display: none; }
-        #canvas3D { z-index: 1; display: none; }
-        #drawingCanvas { z-index: 2; }
-        #handCanvas { z-index: 3; pointer-events: none; }
-    </style>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #050505;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+    }
+
+    /* Video feed as a dim mirrored background */
+    #video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+      opacity: 0.15;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Persistent canvas for drawing */
+    #trailCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Cleared-every-frame canvas for cursors/pointers */
+    #uiCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* Floating UI Controls */
+    #controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      background: rgba(20, 20, 20, 0.85);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      backdrop-filter: blur(5px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      width: 250px;
+    }
+
+    h2 {
+      margin: 0 0 15px 0;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #00ffcc;
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+    }
+
+    .control-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.9rem;
+      color: #bbb;
+    }
+
+    input[type="color"] {
+      width: 100%;
+      height: 40px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: none;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+
+    #status {
+      margin-top: 15px;
+      padding: 10px;
+      background: #222;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: bold;
+      letter-spacing: 1px;
+      color: #ffaa00;
+      transition: color 0.3s ease;
+    }
+
+    .instructions {
+      margin-top: 15px;
+      font-size: 0.8rem;
+      color: #888;
+      line-height: 1.5;
+    }
     
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.5rem;
+      z-index: 20;
+      color: #00ffcc;
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { opacity: 0.5; }
+      to { opacity: 1; }
+    }
+  </style>
 </head>
 <body>
 
-    <div class="control-panel">
-        <button id="btnDrawing" class="active">وضع الرسم</button>
-        <button id="btn3D">وضع تفكيك المجسمات</button>
-        <button id="btnClear" class="clear-btn">مسح المكتوب</button>
-    </div>
+  <!-- Loading Text -->
+  <div id="loading">Loading AI Models & Webcam...</div>
 
-    <video id="videoElement" autoplay playsinline></video>
+  <!-- Layers -->
+  <video id="video" autoplay playsinline></video>
+  <canvas id="trailCanvas"></canvas>
+  <canvas id="uiCanvas"></canvas>
+
+  <!-- UI Controls -->
+  <div id="controls">
+    <h2>Air Draw</h2>
     
-    <div class="canvas-container">
-        <canvas id="canvas3D"></canvas>
-        <canvas id="drawingCanvas"></canvas>
-        <canvas id="handCanvas"></canvas>
+    <div class="control-group">
+      <label for="colorPicker">Neon Color</label>
+      <input type="color" id="colorPicker" value="#00ffcc">
     </div>
 
-    <script>
-        let currentMode = 'drawing'; 
-        let isDrawing = false;
-        
-        let smoothedX = 0; let smoothedY = 0; let lastX = 0; let lastY = 0;
-        const smoothingFactor = 0.2;
-        
-        const btnDrawing = document.getElementById('btnDrawing');
-        const btn3D = document.getElementById('btn3D');
-        const btnClear = document.getElementById('btnClear');
-        
-        const drawingCanvas = document.getElementById('drawingCanvas');
-        const canvas3D = document.getElementById('canvas3D');
-        const handCanvas = document.getElementById('handCanvas');
-        const drawCtx = drawingCanvas.getContext('2d');
-        const handCtx = handCanvas.getContext('2d');
+    <div class="control-group">
+      <label for="brushSize">Brush Thickness: <span id="sizeVal">5</span>px</label>
+      <input type="range" id="brushSize" min="1" max="30" value="5">
+    </div>
 
-        function resizeCanvas() {
-            drawingCanvas.width = window.innerWidth; drawingCanvas.height = window.innerHeight;
-            handCanvas.width = window.innerWidth; handCanvas.height = window.innerHeight;
-            
-            // 3. تعديل القلم ليكون أسود وبدون إضاءة (Neon) ليبدو كقلم سبورة حقيقي
-            drawCtx.strokeStyle = '#000000'; 
-            drawCtx.lineWidth = 6;
-            drawCtx.lineCap = 'round';
-            drawCtx.lineJoin = 'round';
-            drawCtx.shadowBlur = 0; 
+    <div id="status">DETECTING...</div>
+
+    <div class="instructions">
+      <strong>Gestures:</strong><br>
+      ☝️ <strong>1 Finger:</strong> Draw<br>
+      ✋ <strong>Open Palm:</strong> Erase All<br>
+      ✊ <strong>Closed Fist:</strong> Pause
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const video = document.getElementById('video');
+    const trailCanvas = document.getElementById('trailCanvas');
+    const uiCanvas = document.getElementById('uiCanvas');
+    const trailCtx = trailCanvas.getContext('2d', { willReadFrequently: true });
+    const uiCtx = uiCanvas.getContext('2d');
+    
+    const colorPicker = document.getElementById('colorPicker');
+    const brushSize = document.getElementById('brushSize');
+    const sizeVal = document.getElementById('sizeVal');
+    const statusEl = document.getElementById('status');
+    const loadingEl = document.getElementById('loading');
+
+    // UI Listeners
+    brushSize.addEventListener('input', (e) => sizeVal.textContent = e.target.value);
+
+    // Resize Canvases
+    function resize() {
+      trailCanvas.width = window.innerWidth;
+      trailCanvas.height = window.innerHeight;
+      uiCanvas.width = window.innerWidth;
+      uiCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // State Variables
+    let lastX = null;
+    let lastY = null;
+
+    // MediaPipe Hands Setup
+    const hands = new Hands({locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }});
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    // Start Camera
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({image: video});
+      },
+      width: 1280,
+      height: 720
+    });
+    
+    camera.start().then(() => {
+      loadingEl.style.display = 'none';
+    });
+
+    // Helper: Determine if a finger is extended based on landmark Y values
+    // Canvas Y grows downwards. So tip < pip means finger is pointing UP.
+    function isFingerUp(landmarks, tipIndex, pipIndex) {
+      return landmarks[tipIndex].y < landmarks[pipIndex].y;
+    }
+
+    function onResults(results) {
+      // Clear UI canvas every frame for cursors
+      uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        // 1. Check Finger States
+        const indexUp  = isFingerUp(landmarks, 8, 6);
+        const middleUp = isFingerUp(landmarks, 12, 10);
+        const ringUp   = isFingerUp(landmarks, 16, 14);
+        const pinkyUp  = isFingerUp(landmarks, 20, 18);
+
+        // 2. Define Gestures
+        const isDraw  = indexUp && !middleUp && !ringUp && !pinkyUp;
+        const isErase = indexUp && middleUp && ringUp && pinkyUp;
+        const isPause = !indexUp && !middleUp && !ringUp && !pinkyUp;
+
+        // 3. Map Index Tip to Canvas (Mirror X coordinate)
+        const currentX = (1 - landmarks[8].x) * trailCanvas.width;
+        const currentY = landmarks[8].y * trailCanvas.height;
+
+        // Draw an indicator cursor on the UI canvas
+        uiCtx.beginPath();
+        uiCtx.arc(currentX, currentY, 8, 0, 2 * Math.PI);
+        uiCtx.fillStyle = isDraw ? colorPicker.value : (isErase ? '#ff0000' : '#888');
+        uiCtx.fill();
+
+        // 4. Handle Logic
+        if (isErase) {
+          statusEl.textContent = "ERASING";
+          statusEl.style.color = "#ff4444";
+          trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+          lastX = null;
+          lastY = null;
+        } 
+        else if (isDraw) {
+          statusEl.textContent = "DRAWING";
+          statusEl.style.color = "#00ffcc";
+          
+          if (lastX !== null && lastY !== null) {
+            drawNeonLine(lastX, lastY, currentX, currentY);
+          }
+          lastX = currentX;
+          lastY = currentY;
+        } 
+        else if (isPause) {
+          statusEl.textContent = "PAUSED";
+          statusEl.style.color = "#aaaaaa";
+          lastX = null;
+          lastY = null;
+        } 
+        else {
+          statusEl.textContent = "HOVERING";
+          statusEl.style.color = "#ffffff";
+          lastX = null;
+          lastY = null;
         }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+      } else {
+        statusEl.textContent = "NO HAND DETECTED";
+        statusEl.style.color = "#666";
+        lastX = null;
+        lastY = null;
+      }
+    }
 
-        btnDrawing.addEventListener('click', () => {
-            currentMode = 'drawing';
-            btnDrawing.classList.add('active'); btn3D.classList.remove('active');
-            drawingCanvas.style.display = 'block'; canvas3D.style.display = 'none';
-        });
+    function drawNeonLine(x1, y1, x2, y2) {
+      const color = colorPicker.value;
+      const size = parseInt(brushSize.value);
 
-        btn3D.addEventListener('click', () => {
-            currentMode = '3d';
-            btn3D.classList.add('active'); btnDrawing.classList.remove('active');
-            drawingCanvas.style.display = 'none'; canvas3D.style.display = 'block';
-        });
-
-        btnClear.addEventListener('click', () => { drawCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height); });
-
-        // بيئة Three.js
-        const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera3D.position.z = 5;
-        const renderer = new THREE.WebGLRenderer({ canvas: canvas3D, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-
-        const light = new THREE.DirectionalLight(0xffffff, 1); light.position.set(1, 1, 2).normalize(); scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
-
-        const parts = []; const colors = [0xff0000, 0x00ff00, 0x0000ff];
-        for(let i=0; i<3; i++) {
-            const geo = new THREE.BoxGeometry(1, 1, 1);
-            const mat = new THREE.MeshStandardMaterial({ color: colors[i] });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.x = (i - 1) * 1.5; scene.add(mesh); parts.push(mesh);
-        }
-
-        let heldObject = null; const raycaster = new THREE.Raycaster();
-
-        function animate3D() {
-            requestAnimationFrame(animate3D);
-            parts.forEach(part => { if(part !== heldObject) { part.rotation.x += 0.01; part.rotation.y += 0.01; } });
-            renderer.render(scene, camera3D);
-        }
-        animate3D();
-
-        const videoElement = document.getElementById('videoElement');
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.8 });
-
-        hands.onResults((results) => {
-            handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-            
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const thumb = landmarks[4]; const index = landmarks[8];
-                const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-
-                // 4. جعل هيكل اليد بألوان داكنة لتظهر بوضوح على الخلفية البيضاء
-                const handColor = distance < 0.08 ? '#00aa00' : '#0000ff'; // أخضر غامق عند الكتابة، أزرق عند الرفع
-                drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, {color: handColor, lineWidth: 4});
-                drawLandmarks(handCtx, landmarks, {color: '#333333', lineWidth: 1, radius: 2}); // مفاصل رمادية داكنة
-
-                const rawX = index.x * drawingCanvas.width; const rawY = index.y * drawingCanvas.height;
-
-                if (smoothedX === 0 && smoothedY === 0) { smoothedX = rawX; smoothedY = rawY; } 
-                else { smoothedX += (rawX - smoothedX) * smoothingFactor; smoothedY += (rawY - smoothedY) * smoothingFactor; }
-
-                const ndcX = (index.x * 2) - 1; const ndcY = -(index.y * 2) + 1;
-
-                if (distance < 0.08) { 
-                    if (currentMode === 'drawing') {
-                        if (!isDrawing) { isDrawing = true; lastX = smoothedX; lastY = smoothedY; }
-                        drawCtx.beginPath(); drawCtx.moveTo(lastX, lastY); drawCtx.lineTo(smoothedX, smoothedY); drawCtx.stroke();
-                        lastX = smoothedX; lastY = smoothedY;
-                    } 
-                    else if (currentMode === '3d') {
-                        if (!heldObject) {
-                            raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera3D);
-                            const intersects = raycaster.intersectObjects(parts);
-                            if (intersects.length > 0) { heldObject = intersects[0].object; heldObject.material.emissive.setHex(0x555555); }
-                        } else {
-                            heldObject.position.x += ((ndcX * 6) - heldObject.position.x) * 0.2;
-                            heldObject.position.y += ((ndcY * 4) - heldObject.position.y) * 0.2;
-                        }
-                    }
-                } else { 
-                    isDrawing = false; smoothedX = rawX; smoothedY = rawY;
-                    if (heldObject) { heldObject.material.emissive.setHex(0x000000); heldObject = null; }
-                }
-            }
-        });
-
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 1280, height: 720
-        });
-        camera.start();
-    </script>
+      trailCtx.beginPath();
+      trailCtx.moveTo(x1, y1);
+      trailCtx.lineTo(x2, y2);
+      
+      // Neon Styles
+      trailCtx.strokeStyle = color;
+      trailCtx.lineWidth = size;
+      trailCtx.lineCap = 'round';
+      trailCtx.lineJoin = 'round';
+      trailCtx.shadowBlur = size * 3; // Glow radius relative to thickness
+      trailCtx.shadowColor = color;
+      
+      trailCtx.stroke();
+    }
+  </script>
 </body>
 </html>
